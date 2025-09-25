@@ -11,8 +11,6 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from '../../../environment';
 
 const url = environment.supabaseUrl;
-const key = environment.supabaseKey;
-
 @Component({
   selector: 'app-textbox',
   standalone: true,
