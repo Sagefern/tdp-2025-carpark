@@ -3,27 +3,31 @@ const request = require('supertest');
 const app = require('./server.js');
 const { createClient } = require('@supabase/supabase-js');
 
-// Use environment variables for Supabase credentials
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 beforeAll(() => {
-    // This runs once before all tests
+  // optional setup
 });
 
 afterAll(async () => {
-    //No need to close Supabase client
+  // Clean up: delete the test rows so they don’t remain
+  await supabase
+    .from('carparks')
+    .delete()
+    .in('name', ['Bugis Junction', 'Plaza Singapura']);
 });
 
 beforeEach(async () => {
- // This runs before each individual test
- // We clean the table and seed it with known data for a predictable state.
-  // Delete all carpark records
-  await supabase.from('carparks').delete().neq('id', 0);
+  // delete the test rows if they exist
+  await supabase
+    .from('carparks')
+    .delete()
+    .in('name', ['Bugis Junction', 'Plaza Singapura']);
 
-  // Insert test carpark data
-  await supabase.from('carparks').insert([
+  // insert test data
+  const { error } = await supabase.from('carparks').insert([
     {
       name: 'Bugis Junction',
       weekday_rate: '$1.20/30min',
@@ -38,46 +42,46 @@ beforeEach(async () => {
       night_parking: 'Not Available',
       region: 'Central'
     }
-    // Add more test records as needed
   ]);
+  if (error) {
+    throw error;
+  }
 });
 
-// Main test suite
+// Your test suite
 describe('Carparks API', () => {
- // Test cases will go here
- //READ operations:
-    describe('GET /api/carparks', () => {
-        it('should return all carparks', async () => {
-            const res = await request(app).get('/api/carparks');
-            expect(res.statusCode).toEqual(200);
-            expect(res.body).toBeInstanceOf(Array);
-            expect(res.body.length).toBeGreaterThan(0);
-            expect(res.body[0].name).toBe('Bugis Junction');
-        });
+  describe('GET /api/carparks', () => {
+    it('should return all carparks', async () => {
+      const res = await request(app).get('/api/carparks');
+      expect(res.statusCode).toEqual(200);
+      expect(res.body).toBeInstanceOf(Array);
+      expect(res.body.length).toBeGreaterThan(0);
+      expect(res.body.some(cp => cp.name === 'Bugis Junction')).toBe(true);
+    });
+  });
+
+  describe('GET /api/carparks/region/:region', () => {
+    it('should return carparks in the specified region', async () => {
+      const res = await request(app).get('/api/carparks/region/Central');
+      expect(res.statusCode).toEqual(200);
+      expect(res.body).toBeInstanceOf(Array);
+      // Since both inserted are Central, there should be at least 2
+      expect(res.body.filter(cp => cp.region === 'Central').length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe('GET /api/carparks/name/:name', () => {
+    it('should return carparks matching the specified name', async () => {
+      const res = await request(app).get('/api/carparks/name/Bugis');
+      expect(res.statusCode).toEqual(200);
+      expect(res.body).toBeInstanceOf(Array);
+      expect(res.body.length).toBe(1);
+      expect(res.body[0].name).toBe('Bugis Junction');
     });
 
-    describe('GET /api/carparks/region/:region', () => {
-        it('should return carparks in the specified region', async () => {
-            const res = await request(app).get('/api/carparks/region/Central');
-            expect(res.statusCode).toEqual(200);
-            expect(res.body).toBeInstanceOf(Array);
-            expect(res.body.length).toBe(2); // Assuming 2 carparks in Central region
-            expect(res.body[0].region).toBe('Central');
-        });
+    it('should return 404 if the carpark is not found', async () => {
+      const response = await request(app).get('/api/carparks/name/NonExistentCarpark');
+      expect(response.statusCode).toBe(404);
     });
-
-    describe('GET /api/carparks/name/:name', () => {
-        it('should return carparks matching the specified name', async () => {
-            const res = await request(app).get('/api/carparks/name/Bugis');
-            expect(res.statusCode).toEqual(200);
-            expect(res.body).toBeInstanceOf(Array);
-            expect(res.body.length).toBe(1); // Assuming 1 carpark with 'Bugis' in its name
-            expect(res.body[0].name).toBe('Bugis Junction');
-        });
-
-        it('should return 404 if the carpark is not found', async () => {
-            const response = await request(app).get('/api/carparks/name/NonExistentCarpark');
-            expect(response.statusCode).toBe(404);
-        });
-    });
+  });
 });
